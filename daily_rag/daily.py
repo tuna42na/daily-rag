@@ -17,8 +17,8 @@ if journal_path.exists():
 
 today = date.today().isoformat()
 items = answer(
-    f"actionable items, deadlines, and news relevant to: {config.PROFILE}",
-    "Produce a prioritized markdown checklist (- [ ] item) of things I should do or read today, with the source URL on each item.",
+    f"top news topics and reporting across all sources, relevant to: {config.PROFILE}",
+    "Write a concise topic-level news breakdown across the provided sources. Group related reporting under a few themes and explain what is being reported, noting which sources cover each topic and any overlap or differences when supported. Do not make article headlines or a story-by-story list the main structure; use individual articles only as supporting examples. Cite the source URL for each topic. If the sources do not support a meaningful topic, say so.",
     recent,
 )
 daily_task = answer(
@@ -27,7 +27,7 @@ daily_task = answer(
     "Factor in what I did yesterday and what I plan to do today from my check-ins.",
     recent,
 )
-md = f"# To-do for {today}\n\n{items}\n\n## Daily Tasks\n\n{daily_task}\n"
+md = f"# News & Topics for {today}\n\n{items}\n\n## Daily Tasks\n\n{daily_task}\n"
 Path(config.OUTPUT_DIR).mkdir(exist_ok=True)
 Path(config.OUTPUT_DIR, f"{today}.md").write_text(md)
 print(md)
