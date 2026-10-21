@@ -4,7 +4,7 @@ from . import config
 from .store import search
 
 
-def answer(query: str, instruction: str) -> str:
+def answer(query: str, instruction: str, extra: str = "") -> str:
     """Retrieve relevant chunks for a query, then ask the model to answer from them only."""
     context = "\n\n---\n\n".join(f"[source: {h['url']}]\n{h['text']}" for h in search(query))
     res = ollama.chat(
@@ -13,7 +13,8 @@ def answer(query: str, instruction: str) -> str:
             {
                 "role": "system",
                 "content": f"You help the user plan their day. About the user: {config.PROFILE}\n"
-                "Use ONLY the provided context. Cite the source URL for each item. If nothing applies, say so.",
+                "Use ONLY the provided context. Cite the source URL for each item. If nothing applies, say so."
+                + (f"\n\nThe user's own recent check-ins (trusted, no URL needed):\n{extra}" if extra else ""),
             },
             {"role": "user", "content": f"Context:\n{context}\n\nTask: {instruction}"},
         ],

@@ -5,5 +5,7 @@ CHUNK_OVERLAP = 100
 TOP_K = 8
 INDEX_PATH = "data/index.json"
 OUTPUT_DIR = "output"
+# Check-in log; lives under data/, which is gitignored.
+JOURNAL_PATH = "data/journal.md"
 # Who you are / what you care about. Drives what the model treats as actionable.
 PROFILE = "Software engineer interested in AI tooling, developer products, and startup news."
