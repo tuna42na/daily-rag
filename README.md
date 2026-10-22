@@ -54,7 +54,14 @@ The one-off `ask` workflow skips steps 1–4 and uses the existing index. Its qu
 Run these commands from the repository root (`daily-rag/`), because source, index, and output paths are relative to the current working directory.
 
 1. Install Python 3.10 or newer.
-2. Install and start [Ollama](https://ollama.com/), then download the models configured in `daily_rag/config.py`:
+2. Create your local config from the tracked example, which includes every configuration field:
+
+   ```sh
+   cp daily_rag/config.example.py daily_rag/config.py
+   ```
+
+   Edit `daily_rag/config.py` for your models, paths, and profile. This local file is ignored by Git; keep `daily_rag/config.example.py` up to date when adding configuration fields. If you already have a local config, keep it rather than overwriting it.
+3. Install and start [Ollama](https://ollama.com/), then download the models configured in `daily_rag/config.py`:
 
    ```sh
    ollama pull llama3.2
@@ -62,7 +69,7 @@ Run these commands from the repository root (`daily-rag/`), because source, inde
    ```
 
    Keep the Ollama service running while using the application.
-3. Create and activate a virtual environment, then install this project's Python dependencies:
+4. Create and activate a virtual environment, then install this project's Python dependencies:
 
    ```sh
    python3 -m venv .venv
@@ -70,13 +77,13 @@ Run these commands from the repository root (`daily-rag/`), because source, inde
    python -m pip install -e .
    ```
 
-4. Generate a daily digest (this fetches the configured sources first):
+5. Generate a daily digest (this fetches the configured sources first):
 
    ```sh
    python -m daily_rag.daily
    ```
 
-5. Ask a one-off question against the saved index:
+6. Ask a one-off question against the saved index:
 
    ```sh
    python -m daily_rag.ask "What AI tooling news should I look into?"
