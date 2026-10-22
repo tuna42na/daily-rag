@@ -6,10 +6,13 @@ from . import config
 from .chunk import chunk
 from .embed import embed
 from .fetch import fetch_text
+from .personal import refresh
 from .store import load, save
 
 
 def ingest() -> None:
+    documents = refresh()
+    print(f"Personal context: {len(documents)} documents")
     sources = json.loads(Path("sources.json").read_text())
     records = load()
     for s in sources:
