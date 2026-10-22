@@ -90,6 +90,28 @@ Run these commands from the repository root (`daily-rag/`), because source, inde
    python -m daily_rag.ask "What AI tooling news should I look into?"
    ```
 
+### Make shortcuts
+
+After activating the virtual environment, use `make help` to list the common commands.
+If you have not created your local configuration yet, run `make config`, then edit
+`daily_rag/config.py` for your models, paths, and profile. This target never
+overwrites an existing configuration. Application and test targets stop with a
+setup message if the configuration is missing.
+
+```sh
+make config
+make install
+make test
+make daily DAILY_ARGS="--no-ingest --no-check-in"
+make ingest
+make ask QUESTION="What AI tooling news should I look into?"
+make tasks TASK_ARGS="list"
+```
+
+To select an interpreter explicitly without activating the environment, add
+`PYTHON=.venv/bin/python` to a command, for example
+`make test PYTHON=.venv/bin/python`.
+
 Useful variations:
 
 ```sh
