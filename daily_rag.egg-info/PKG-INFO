@@ -5,3 +5,5 @@ Requires-Python: >=3.10
 Requires-Dist: ollama
 Requires-Dist: httpx
 Requires-Dist: beautifulsoup4
+Requires-Dist: pypdf
+Requires-Dist: pydantic>=2

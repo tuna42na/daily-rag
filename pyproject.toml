@@ -2,4 +2,11 @@
 name = "daily-rag"
 version = "0.1.0"
 requires-python = ">=3.10"
-dependencies = ["ollama", "httpx", "beautifulsoup4"]
+dependencies = ["ollama", "httpx", "beautifulsoup4", "pypdf", "pydantic>=2"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["daily_rag"]

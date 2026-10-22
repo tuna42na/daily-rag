@@ -24,5 +24,8 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 def search(query: str, top_k: int = config.TOP_K) -> list[dict]:
     """Return the top_k records most similar to the query."""
+    records = load()
+    if not records:
+        return []
     q = embed([query])[0]
-    return sorted(load(), key=lambda r: _cosine(q, r["embedding"]), reverse=True)[:top_k]
+    return sorted(records, key=lambda r: _cosine(q, r["embedding"]), reverse=True)[:top_k]

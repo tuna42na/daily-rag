@@ -3,3 +3,4 @@ __pycache__
 data
 output
 /daily_rag/config.py
+personal-context

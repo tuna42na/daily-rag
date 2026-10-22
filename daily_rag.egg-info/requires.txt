@@ -1,3 +1,5 @@
 ollama
 httpx
 beautifulsoup4
+pypdf
+pydantic>=2

@@ -2,14 +2,15 @@
 
 `daily-rag` is a small command-line RAG (retrieval-augmented generation) application. It downloads text from a list of web pages, stores text chunks and their embeddings locally, finds chunks related to a question, and asks a local Ollama language model to answer using those chunks.
 
-The included daily workflow turns the retrieved information into a Markdown to-do list in `output/`. The application does not send these model requests to a hosted API: it uses the Ollama service running on your machine.
+The daily workflow combines news with your resume, project roadmap, and self-reported progress to produce constructive coaching, trackable tasks, and all-day calendar events in `output/`. Model requests use your local Ollama service, not a hosted API.
 
 ## How The Pieces Fit
 
 There are two workflows:
 
-- `daily_rag.daily` refreshes the sources, asks for a daily list, and writes `output/YYYY-MM-DD.md`.
-- `daily_rag.ask` asks a one-off question against the index that already exists. It does not refresh the sources first.
+- `daily_rag.daily` refreshes the sources and personal documents, plans tasks, and writes `output/YYYY-MM-DD.md` and `output/tasks.ics`.
+- `daily_rag.ask` asks a one-off question using the existing web index, current personal documents, and task history.
+- `daily_rag.tasks` lists tracked tasks and records outcomes, blockers, and feedback.
 
 The pipeline is:
 
@@ -42,12 +43,12 @@ flowchart TD
 2. Ingestion reads `sources.json`, then fetches each URL. If a source has a CSS `selector`, only matching page elements are extracted; otherwise the page body is used. Common non-content elements such as scripts, navigation, and footers are removed.
 3. The text is split into overlapping character-based chunks. The embedding model turns every chunk into a numeric vector that represents its meaning.
 4. Each chunk, vector, source URL, and fetch time is saved in `data/index.json`. Existing records for a successfully fetched URL are replaced. If fetching or embedding one source fails, that source is skipped and ingestion continues; existing records for that URL are left in place.
-5. The daily workflow builds a retrieval query from `PROFILE`, and a separate instruction asking for a prioritized Markdown checklist.
-6. The query is embedded. The app compares its vector with every stored chunk using cosine similarity and selects the `TOP_K` closest chunks.
-7. The chat model receives the profile, the selected text with source URLs, and the checklist instruction. It is told to use only that context and cite source URLs.
-8. The result is written to `output/<today>.md` and printed in the terminal. Running it again on the same date replaces that date's output file.
+5. Local Markdown, text, and PDF documents are refreshed by content hash. Deleted files are removed from the current snapshot. Full document text is supplied separately from web retrieval so roadmap rules and resume context cannot be crowded out by news.
+6. An interactive check-in is collected before planning. The planner receives the current documents, recent check-ins, open work, and the latest 30 closed tasks. Web news stays separate from task planning so it cannot distract from roadmap prerequisites.
+7. The model returns structured tasks and observations, selecting specific evidence lines. The app validates the schema, task cap, and evidence identifiers, then attaches supporting quotes directly from the source rather than trusting model-generated quotations. Unfinished/blocked work carries forward before new work is added. The separate news response remains topic-oriented.
+8. The result is written to `output/<today>.md`; `output/tasks.ics` contains all tracked task events. Rerunning the same day reuses that day's plan rather than inventing more tasks, while refreshing local documents and regenerating the news and calendar output.
 
-The one-off `ask` workflow skips steps 1–4 and uses the existing index. Its question is used both to find relevant chunks and as the instruction for the chat model.
+The one-off `ask` workflow uses the existing web index but always refreshes personal documents. Its question is used both to retrieve web chunks and as the instruction for the chat model.
 
 ## Setup And Run
 
@@ -94,9 +95,69 @@ Useful variations:
 ```sh
 python -m daily_rag.ingest                 # Refresh the index without generating a digest
 python -m daily_rag.daily --no-ingest      # Generate from the current index without fetching pages
+python -m daily_rag.daily --no-check-in    # Skip interactive check-in prompts
 ```
 
 The first ingestion creates `data/index.json`. `output/` is created automatically when the daily workflow writes its result.
+
+## Personal Coaching And Calendar Tasks
+
+Put your resume and roadmap in `personal-context/`. Supported formats are `.pdf` (with selectable text), `.md`, and `.txt`, including subfolders. Scanned PDFs need OCR first; unreadable/empty documents and extraction errors stop the run rather than silently using stale text. Hidden files are ignored; symlinks are rejected. Other formats are not ingested.
+
+In your existing `daily_rag/config.py`, add these fields if you created it before the coaching feature:
+
+```python
+PERSONAL_CONTEXT_DIR = "personal-context"
+PERSONAL_CONTEXT_CACHE = "data/personal-context.json"
+PERSONAL_CONTEXT_MAX_CHARS = 40000
+TASKS_PATH = "data/tasks.json"
+DAILY_TASK_LIMIT = 2
+MODEL_CONTEXT_TOKENS = 32768
+```
+
+The two-task default matches the current roadmap. `DAILY_TASK_LIMIT` accepts 1–3. In documents whose filename contains `roadmap`, unchecked Markdown items (`[ ]`, including table cells) are queued in source order, excluding checked items, already tracked titles, and the `Parking lot` section. This deterministic queue takes priority over model-generated tasks: the model cannot replace the first roadmap steps with unrelated resume or news tasks. Outcomes in the task log advance the queue even if you have not edited the original checkboxes yet.
+
+The model supplies constructive observations and can propose additional tasks when carryover and roadmap work leave capacity. It is instructed to honor lower roadmap budgets, prerequisites, alternating tracks, and non-goals, and not to convert sequence numbers into deadlines; review those semantics yourself and update `DAILY_TASK_LIMIT` if your budget changes. The app enforces the configured cap and rejects exact-title repeats; it cannot reliably detect paraphrased duplicates. When personal documents exist and no work is carried over or queued, at least one grounded task is required (an artifact/status review if progress is uncertain). An empty saved plan is reconsidered when personal context is available.
+
+The coach prioritizes specific criticism over encouragement:
+
+- **Resume updates:** identify project results that could justify a new bullet, with an artifact or result to verify. Never invent achievements. Recommendations can appear in the coaching review even when roadmap tasks fill the calendar budget.
+- **Project learning:** connect a learning task to the earliest unfinished project work and define a concrete output, such as a test, diagram, or short implementation.
+- **Weak spots:** distinguish observed blockers from *missing evidence*. A skill absent from a resume is not proof you lack it.
+
+Until you have recorded an outcome or check-in, the review explicitly says there is insufficient progress evidence rather than asking the model to invent a weakness from your resume. When roadmap tasks fill the day's budget and no outcomes exist yet, the task plan is generated directly from the queue without a planning-model call.
+
+Recorded outcomes also produce deterministic coaching: blocked work gets a blocker count and an artifact-based recovery step, skipped work triggers a scope review, and completed work triggers artifact verification and a conditional resume review. These take precedence over speculative model criticism. If carryover and roadmap items fill the budget and these reviews are available, no planning-model call is needed. The model remains available for additional task recommendations when capacity remains, check-in-only reviews, and one-off coaching questions.
+
+Current documents are provided in full, subject to the character limit above; exceeding the limit fails explicitly instead of silently dropping part of the roadmap. The Ollama context window defaults to 32K tokens; larger documents/history may require a larger model-supported window or shorter context. Content hashes refresh extraction only when files change. Historical evidence cited by a plan is retained in `data/tasks.json` even after documents change or are deleted, so you can audit why a task was recommended. This is retrieval and history, not model training.
+
+### Feedback loop
+
+```sh
+python -m daily_rag.tasks list
+python -m daily_rag.tasks update TASK_ID done --note "Added endpoint tests; artifact: commit abc123"
+python -m daily_rag.tasks update TASK_ID blocked --note "Migration fails; need to fix the schema first"
+python -m daily_rag.tasks update TASK_ID skipped --note "No longer relevant after scope change"
+python -m daily_rag.tasks update TASK_ID planned --note "Blocker resolved; ready to resume"
+```
+
+Use the actual ID printed in the digest or task list. Completion feedback should name the result or artifact, not just say "done." Status changes and notes are timestamped and retained; they are **self-reported**, not independently verified. Editing Markdown checkboxes or marking a calendar event complete does **not** update the task log. Feedback updates the calendar immediately, informs the next day's plan, and is available to `daily_rag.ask` immediately. A saved same-day plan's assessment is not regenerated after feedback or document edits.
+
+For the strongest loop, record a brief result/blocker after each task, update roadmap checkboxes yourself, and do a weekly review using:
+
+```sh
+python -m daily_rag.ask "Review my recent outcomes and blockers against my roadmap. What should I cut, practice next, or add to my resume? Cite evidence and label uncertainty."
+```
+
+### Calendar behavior
+
+Open/import `output/tasks.ics` in a calendar app. Events are all-day, with an exclusive next-day end date; they do not assume your availability, invent deadlines, or reserve busy time. Descriptions contain the reason, completion criterion, evidence references, task ID, and feedback. Unfinished/blocked tasks move forward with stable event UIDs and increasing revisions. Completed events are labeled `done`; skipped events are marked cancelled.
+
+This is a **local export**, not a calendar account integration or subscription server. Re-import behavior varies by calendar app: stable UIDs support updates, but some clients may duplicate imported events or ignore cancellations. Use a dedicated calendar you can replace/re-import if needed. No external events are created automatically and there is no reverse sync.
+
+### Privacy
+
+`personal-context/`, `data/`, and `output/` are Git-ignored. Extracted resume text, feedback, evidence snapshots, and calendar descriptions can contain sensitive information. Keep them local and avoid sharing the export or log unintentionally. Documents go to the local Ollama endpoint only; do not configure it to use a remote service if you want this privacy boundary. Removing a source file removes it from current context, but does not erase historical evidence in the task log or already exported events.
 
 ## Change What It Reads
 
@@ -113,11 +174,11 @@ Use a selector that targets the actual content you want, not a large page wrappe
 
 ## Make Results Clearer And More Relevant
 
-The most useful controls live in `daily_rag/config.py` and the `answer(...)` call in `daily_rag/daily.py`.
+The main controls live in `daily_rag/config.py`, the coaching instructions in `daily_rag/coaching.py`, and the news `answer(...)` call in `daily_rag/daily.py`.
 
 - **Who the digest is for:** edit `PROFILE`. Be specific about role, interests, goals, and what counts as actionable. This profile influences both the daily retrieval query and the chat model's system message.
 - **What to retrieve:** the first string passed to `answer(query, instruction)` in `daily.py` is the retrieval query. Name the topics and desired relevance explicitly. Better query: `software engineering, AI developer tools, product launches, and startup news relevant to my work`.
-- **How to format and judge the answer:** the second string is the generation instruction. Specify structure, prioritization criteria, what information each item needs, and what to do when evidence is insufficient. For example: `Return at most 8 items as a prioritized Markdown checklist. For each, give a short action, why it matters, and the source URL. Include a deadline only when the source states one. Exclude items that do not clearly match my profile. If no items qualify, say so.`
+- **How to format and judge the answer:** the second string in the news `answer(...)` call is the news instruction. Coaching tasks have a separate validated JSON schema, daily cap, evidence references, and completion criteria.
 - **How much context to retrieve:** `TOP_K` controls how many chunks are passed to the model. Raising it can improve coverage but also add noise; lowering it can make answers more focused but miss relevant material.
 - **Chunk boundaries:** `CHUNK_SIZE` and `CHUNK_OVERLAP` are character counts, not token counts. Larger chunks preserve more surrounding context but can dilute relevance. More overlap preserves context across boundaries but increases storage and duplicate content.
 - **Models:** `EMBED_MODEL` creates vectors; `CHAT_MODEL` writes the answer. If you change the embedding model, re-ingest all sources before searching so the stored vectors and query vector come from the same model. The chat model can be changed independently, provided it is available in Ollama.
@@ -131,6 +192,7 @@ For a clearer daily result, start by tightening the source list and selectors, t
 - The stored `fetched_at` timestamp is not currently used to rank or filter results.
 - Citations are source URLs attached to chunks, not verified links to individual claims. The model can still produce unsupported details, so check important dates, deadlines, and claims against the source.
 - A fetch failure is printed and skipped, but does not fail the whole run. That means an older indexed version of that source may remain available.
+- Evidence identifiers are validated and supporting quotes are copied directly from source snapshots, but the model's interpretation of evidence is not independently verified. Invalid planner JSON, unknown evidence, or too many tasks stop planning without saving a new plan; check the error and rerun.
 
 ## Python Concepts Used Here
 
@@ -153,7 +215,11 @@ For a clearer daily result, start by tightening the source list and selectors, t
 | --- | --- |
 | `daily_rag/daily.py` | Daily workflow and Markdown output |
 | `daily_rag/ask.py` | One-off command-line question |
-| `daily_rag/ingest.py` | Read sources, fetch, chunk, embed, and update index |
+| `daily_rag/ingest.py` | Refresh personal documents and ingest web sources |
+| `daily_rag/personal.py` | Hash and extract local Markdown/text/PDF context |
+| `daily_rag/coaching.py` | Generate and validate evidence-based daily plans |
+| `daily_rag/tasks.py` | Persist plans, evidence, task outcomes, and feedback CLI |
+| `daily_rag/calendar.py` | Export all-day task events with stable IDs |
 | `daily_rag/fetch.py` | Download and extract page text |
 | `daily_rag/chunk.py` | Split text into overlapping chunks |
 | `daily_rag/embed.py` | Create embeddings with Ollama |
