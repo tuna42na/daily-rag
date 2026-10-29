@@ -133,7 +133,9 @@ class CoachingTests(unittest.TestCase):
             model.assert_not_called()
         self.assertEqual(plan, same)
         self.assertEqual(state, restored)
-        self.assertIn("Done when:", coaching.render_plan(state, plan))
+        rendered = coaching.render_plan(state, plan)
+        self.assertIn("Done when:", rendered)
+        self.assertNotIn("Supporting quote:", rendered)
 
     def test_unknown_evidence_and_invalid_json_do_not_save_plan(self):
         invalid = dict(self.suggestion, evidence=["invented-source"])
@@ -187,13 +189,29 @@ class CoachingTests(unittest.TestCase):
 
     def test_supporting_quote_is_attached_from_source_not_generated(self):
         state, plan = self.create_plan()
-        self.assertIn("Supporting quote: Two tasks per day.", coaching.render_plan(state, plan))
+        self.assertNotIn("Supporting quote:", coaching.render_plan(state, plan))
         unfolded = calendar.export_calendar(state).read_text().replace("\n ", "")
         self.assertIn("Supporting quote: Two tasks per day.", unfolded)
         state.evidence.clear()
         tasks.save_state(state)
         with self.assertRaisesRegex(ValueError, "missing a cited evidence snapshot"):
             tasks.load_state()
+
+    def test_roadmap_inline_details_set_task_reason_and_completion_criteria(self):
+        document = personal.Document(
+            source="personal-context/roadmap.md",
+            fingerprint="abcdef123456",
+            text=(
+                "| 01 | [ ] **ABI** Draft the MVP brief; Why: Set scope first. "
+                "; Done when: The brief names the user and non-goals. |"
+            ),
+        )
+
+        [suggestion] = coaching.roadmap_queue([document], tasks.State())
+
+        self.assertEqual(suggestion.title, "ABI Draft the MVP brief")
+        self.assertEqual(suggestion.reason, "Set scope first.")
+        self.assertEqual(suggestion.success_criteria, "The brief names the user and non-goals.")
 
     def test_feedback_carryover_and_closed_tasks(self):
         _, plan = self.create_plan()

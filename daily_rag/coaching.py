@@ -79,6 +79,15 @@ def roadmap_queue(documents: list[Document], state: State) -> list[Suggestion]:
                 title = match.group(1).replace("**", "").replace("`", "").strip()
                 if not title or title.casefold() in known:
                     continue
+                reason = "Next unchecked roadmap item, kept in prerequisite order."
+                success_criteria = f"Record the resulting file, test, note, diagram, or demo that completes: {title}"
+                if "; Why: " in title:
+                    title, details = title.split("; Why: ", 1)
+                    if "; Done when: " in details:
+                        reason, success_criteria = details.split("; Done when: ", 1)
+                    else:
+                        reason = details
+                    title = title.strip()
                 known.add(title.casefold())
                 category = "learning" if title.startswith("ENG ") or learning_section else "build"
                 if title.startswith("REVIEW "):
@@ -86,9 +95,9 @@ def roadmap_queue(documents: list[Document], state: State) -> list[Suggestion]:
                 queue.append(Suggestion(
                     title=title,
                     category=category,
-                    reason="Next unchecked roadmap item, kept in prerequisite order.",
+                    reason=reason.strip(),
                     evidence=[f"{doc.source}@{doc.fingerprint[:12]}:L{number}"],
-                    success_criteria=f"Record the resulting file, test, note, diagram, or demo that completes: {title}",
+                    success_criteria=success_criteria.strip(),
                 ))
     return queue
 
@@ -274,7 +283,6 @@ def render_plan(state: State, plan: Plan) -> str:
             f"  - Why: {task.reason}",
             f"  - Done when: {task.success_criteria}",
             f"  - Evidence: {', '.join(task.evidence)}",
-            f"  - Supporting quote: {state.evidence[task.evidence[0]]}",
             f"  - Task ID: `{task.id}`",
         ])
         if task.feedback:
